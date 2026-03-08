@@ -204,6 +204,21 @@ export default function Home() {
         <div className="header-content">
           <h1 className="logo">Notes<span>.</span></h1>
           <div className="header-actions">
+            {(searchQuery || archiveDate) && (
+              <button
+                className="icon-btn home-btn animate-fade-in"
+                onClick={() => {
+                  setSearchQuery("");
+                  setArchiveDate(null);
+                }}
+                title="回到首頁 (清除搜尋與過濾條件)"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
+                  <polyline points="9 22 9 12 15 12 15 22"></polyline>
+                </svg>
+              </button>
+            )}
             <SearchBar value={searchQuery} onSearch={setSearchQuery} />
             <ArchiveButton selectedDate={archiveDate} onSelect={setArchiveDate} />
             <button
@@ -344,6 +359,32 @@ export default function Home() {
           background: var(--accent-hover);
           transform: translateY(-2px);
           box-shadow: var(--shadow-sm);
+        }
+
+        .icon-btn {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          width: 44px;
+          height: 44px;
+          border-radius: 50%;
+          color: var(--text-main);
+          background: var(--card-bg);
+          border: 1px solid var(--card-border);
+          box-shadow: var(--shadow-sm);
+          transition: var(--transition);
+          flex-shrink: 0;
+        }
+
+        .icon-btn:hover {
+          color: var(--accent-color);
+          border-color: var(--accent-color);
+          transform: translateY(-2px);
+          box-shadow: var(--shadow-md);
+        }
+
+        .home-btn {
+          /* specific overrides for home button if needed */
         }
 
         .app-content {

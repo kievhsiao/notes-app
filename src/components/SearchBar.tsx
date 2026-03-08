@@ -36,8 +36,11 @@ export default function SearchBar({ value, onSearch }: SearchBarProps) {
           onKeyDown={handleKeyDown}
         />
       </div>
-      <button className="search-btn glass" onClick={handleSearch}>
-        Search
+      <button className="search-btn glass" onClick={handleSearch} aria-label="Search">
+        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <circle cx="11" cy="11" r="8"></circle>
+          <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+        </svg>
       </button>
 
       <style jsx>{`
@@ -85,12 +88,16 @@ export default function SearchBar({ value, onSearch }: SearchBarProps) {
         }
 
         .search-btn {
-          padding: 0 1.5rem;
-          font-weight: 600;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          width: 48px;
+          height: 48px;
+          padding: 0;
           color: var(--text-main);
           background: rgba(255, 255, 255, 0.05); /* or similar glass effect */
           border: 1px solid var(--border-color);
-          border-radius: 2rem;
+          border-radius: 50%;
           cursor: pointer;
           transition: var(--transition);
         }

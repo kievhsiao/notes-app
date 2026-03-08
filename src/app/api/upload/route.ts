@@ -6,7 +6,7 @@ export async function POST(request: NextRequest) {
     try {
         const formData = await request.formData();
         const file = formData.get("file") as File | null;
-        
+
         if (!file) {
             return NextResponse.json({ error: "No file uploaded" }, { status: 400 });
         }
@@ -17,7 +17,7 @@ export async function POST(request: NextRequest) {
         const originalName = file.name;
         const sanitizedName = originalName.replace(/[^a-zA-Z0-9.-]/g, "_");
         const filename = `${Date.now()}-${sanitizedName}`;
-        
+
         const uploadDir = path.join(process.cwd(), "public", "uploads");
         const filepath = path.join(uploadDir, filename);
 

@@ -11,13 +11,10 @@ export default function NoteEditor({ onClose, onSave, initialData }: NoteEditorP
   const [title, setTitle] = useState(initialData?.title || "");
   const [content, setContent] = useState(initialData?.content || "");
   const [tagsStr, setTagsStr] = useState(initialData?.tags.join(", ") || "");
-  const [mediaStr, setMediaStr] = useState(initialData?.media?.join(", ") || "");
+  const [mediaUrls, setMediaUrls] = useState<string[]>(initialData?.media || []);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
+  const uploadFile = async (file: File) => {
     setIsSubmitting(true);
     try {
       const formData = new FormData();
@@ -31,15 +28,20 @@ export default function NoteEditor({ onClose, onSave, initialData }: NoteEditorP
       if (!res.ok) throw new Error("Upload failed");
 
       const data = await res.json();
-
-      setMediaStr(prev => prev ? `${prev}, ${data.url}` : data.url);
+      setMediaUrls(prev => [...prev, data.url]);
     } catch (error) {
       console.error("Image upload failed:", error);
       alert("Failed to upload image.");
     } finally {
       setIsSubmitting(false);
-      e.target.value = ""; // Reset input so same file can be selected again
     }
+  };
+
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    await uploadFile(file);
+    e.target.value = ""; // Reset input so same file can be selected again
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -48,13 +50,12 @@ export default function NoteEditor({ onClose, onSave, initialData }: NoteEditorP
 
     try {
       const parsedTags = tagsStr.split(",").map(t => t.trim()).filter(Boolean);
-      const parsedMedia = mediaStr.split(",").map(m => m.trim()).filter(Boolean);
 
       const newNote: CreateNoteDTO = {
         title: title || "", // empty string allows the API to use the default date
         content,
         tags: parsedTags,
-        media: parsedMedia,
+        media: mediaUrls,
         date: new Date().toISOString(),
       };
 
@@ -111,14 +112,41 @@ export default function NoteEditor({ onClose, onSave, initialData }: NoteEditorP
             </div>
 
             <div className="form-group media-upload-group">
-              <label>Media URLs (comma separated) or Upload</label>
+              <label>Media URLs (Press Enter to add) or Upload</label>
+              {mediaUrls.length > 0 && (
+                <div className="media-pills-container">
+                  {mediaUrls.map((url, idx) => (
+                    <div key={idx} className="media-pill">
+                      <span className="media-pill-text" title={url}>
+                        {url.length > 30 ? url.substring(0, 30) + "..." : url}
+                      </span>
+                      <button
+                        type="button"
+                        className="remove-pill-btn"
+                        onClick={() => setMediaUrls(prev => prev.filter(u => u !== url))}
+                        title="Remove URL"
+                      >
+                        &times;
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
               <div className="upload-input-row">
                 <input
                   type="text"
-                  placeholder="e.g. https://example.com/image.jpg"
-                  value={mediaStr}
-                  onChange={(e) => setMediaStr(e.target.value)}
+                  placeholder="Paste an image URL and press Enter"
                   className="glass-input flex-1"
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      const url = e.currentTarget.value.trim();
+                      if (url) {
+                        setMediaUrls(prev => [...prev, url]);
+                        e.currentTarget.value = "";
+                      }
+                    }
+                  }}
                 />
                 <label className="upload-btn btn-secondary glass">
                   Upload
@@ -304,12 +332,57 @@ export default function NoteEditor({ onClose, onSave, initialData }: NoteEditorP
         .media-upload-group {
            display: flex;
            flex-direction: column;
-        }
-        
-        .upload-input-row {
-           display: flex;
            gap: 0.5rem;
-           align-items: center;
+        }
+
+        .media-pills-container {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 0.5rem;
+          margin-bottom: 0.25rem;
+        }
+
+        .media-pill {
+          display: flex;
+          align-items: center;
+          gap: 0.25rem;
+          background: rgba(59, 130, 246, 0.15);
+          border: 1px solid rgba(59, 130, 246, 0.3);
+          border-radius: 9999px;
+          padding: 0.25rem 0.6rem;
+          font-size: 0.85rem;
+          color: var(--text-main);
+        }
+
+        .media-pill-text {
+          max-width: 200px;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+
+        .remove-pill-btn {
+          background: none;
+          border: none;
+          color: var(--text-muted);
+          cursor: pointer;
+          font-size: 1.1rem;
+          line-height: 1;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          padding: 0 0 0 0.2rem;
+          transition: color 0.2s;
+        }
+
+        .remove-pill-btn:hover {
+          color: var(--text-main);
+        }
+
+        .upload-input-row {
+          display: flex;
+          gap: 0.5rem;
+          align-items: center;
         }
 
         .flex-1 {

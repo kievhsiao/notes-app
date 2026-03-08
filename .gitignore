@@ -45,3 +45,6 @@ data/notes.jsonl
 
 # uploads
 public/uploads
+
+# tasks
+tasks/

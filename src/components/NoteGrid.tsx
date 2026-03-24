@@ -29,21 +29,33 @@ export default function NoteGrid({ notes, onNoteClick, onEditNote, onDeleteNote 
                 />
             ))}
 
-            <style jsx>{`
+      <style jsx>{`
         .note-grid {
           display: grid;
-          grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-          gap: 1.5rem;
+          grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+          gap: 2rem;
           width: 100%;
+          padding: 1rem 0;
         }
 
         .empty-state {
           text-align: center;
-          padding: 4rem 2rem;
+          padding: 6rem 2rem;
           background: var(--card-bg);
+          backdrop-filter: blur(8px);
           border-radius: var(--radius-lg);
-          border: 1px dashed var(--card-border);
+          border: 2px dashed var(--card-border);
           color: var(--text-muted);
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          justify-content: center;
+          gap: 1rem;
+        }
+
+        .empty-state p {
+          font-size: 1.1rem;
+          font-weight: 500;
         }
       `}</style>
         </div>

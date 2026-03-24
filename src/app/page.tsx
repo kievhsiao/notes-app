@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import { Note, CreateNoteDTO } from "@/lib/types";
 import SearchBar from "@/components/SearchBar";
 import ArchiveButton from "@/components/ArchiveButton";
@@ -21,21 +21,56 @@ export default function Home() {
   const [viewingNote, setViewingNote] = useState<Note | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
+  // Read URL params on mount
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const q = params.get("q");
+    if (q) setSearchQuery(q);
+    const year = params.get("year");
+    const month = params.get("month");
+    if (year && month) setArchiveDate({ year: parseInt(year), month: parseInt(month) });
+  }, []);
+
+  // Global Escape key listener to close modals
+
+  // Global Escape key listener to close modals
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        if (isEditorOpen) {
+          setIsEditorOpen(false);
+          setEditingNote(null);
+        }
+        if (isViewerOpen) {
+          setIsViewerOpen(false);
+          setViewingNote(null);
+        }
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [isEditorOpen, isViewerOpen]);
+
+  // Helper to build URL search params - stable with useCallback
+  const getQueryParams = useCallback((pageNumber: number) => {
+    const params = new URLSearchParams();
+    params.set("page", pageNumber.toString());
+    params.set("limit", "50");
+    if (searchQuery.trim()) params.set("q", searchQuery.trim());
+    if (archiveDate) {
+      params.set("year", archiveDate.year.toString());
+      params.set("month", archiveDate.month.toString());
+    }
+    return params.toString();
+  }, [searchQuery, archiveDate]);
+
   // Fetch initial notes or when filters change
   useEffect(() => {
     async function fetchFirstPage() {
       setIsLoading(true);
       try {
-        const queryParams = new URLSearchParams();
-        queryParams.set("page", "1");
-        queryParams.set("limit", "50");
-        if (searchQuery.trim()) queryParams.set("q", searchQuery.trim());
-        if (archiveDate) {
-          queryParams.set("year", archiveDate.year.toString());
-          queryParams.set("month", archiveDate.month.toString());
-        }
-
-        const res = await fetch(`/api/notes?${queryParams.toString()}`);
+        const queryStr = getQueryParams(1);
+        const res = await fetch(`/api/notes?${queryStr}`);
         if (!res.ok) throw new Error("Failed to fetch");
         const data = await res.json();
 
@@ -62,16 +97,9 @@ export default function Home() {
     setIsLoadingMore(true);
     try {
       const nextPage = page + 1;
-      const queryParams = new URLSearchParams();
-      queryParams.set("page", nextPage.toString());
-      queryParams.set("limit", "50");
-      if (searchQuery.trim()) queryParams.set("q", searchQuery.trim());
-      if (archiveDate) {
-        queryParams.set("year", archiveDate.year.toString());
-        queryParams.set("month", archiveDate.month.toString());
-      }
+      const queryStr = getQueryParams(nextPage);
 
-      const res = await fetch(`/api/notes?${queryParams.toString()}`);
+      const res = await fetch(`/api/notes?${queryStr}`);
       if (!res.ok) throw new Error("Failed to fetch");
       const data = await res.json();
 

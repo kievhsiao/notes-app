@@ -1,5 +1,6 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { CreateNoteDTO, Note } from "@/lib/types";
+import styles from "./NoteEditor.module.css";
 
 interface NoteEditorProps {
   onClose: () => void;
@@ -7,12 +8,55 @@ interface NoteEditorProps {
   initialData?: Note;
 }
 
+interface FormState {
+  title: string;
+  content: string;
+  tags: string[];
+  mediaUrls: string[];
+}
+
 export default function NoteEditor({ onClose, onSave, initialData }: NoteEditorProps) {
-  const [title, setTitle] = useState(initialData?.title || "");
-  const [content, setContent] = useState(initialData?.content || "");
-  const [tagsStr, setTagsStr] = useState(initialData?.tags.join(", ") || "");
-  const [mediaUrls, setMediaUrls] = useState<string[]>(initialData?.media || []);
+  const [form, setForm] = useState<FormState>({
+    title: initialData?.title || "",
+    content: initialData?.content || "",
+    tags: initialData?.tags || [],
+    mediaUrls: initialData?.media || [],
+  });
+  const [tagInput, setTagInput] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const titleInputRef = useRef<HTMLInputElement>(null);
+
+  // Focus Title on open
+  useEffect(() => {
+    if (titleInputRef.current) {
+       titleInputRef.current.focus();
+    }
+  }, []);
+
+  // Robust Auto-expand textarea
+  const adjustTextareaHeight = useCallback(() => {
+    const tx = textareaRef.current;
+    if (tx) {
+      tx.style.height = "auto";
+      tx.style.height = `${tx.scrollHeight}px`;
+    }
+  }, []);
+
+  useEffect(() => {
+    adjustTextareaHeight();
+  }, [form.content, adjustTextareaHeight]);
+
+  // Handle window resize
+  useEffect(() => {
+    window.addEventListener("resize", adjustTextareaHeight);
+    return () => window.removeEventListener("resize", adjustTextareaHeight);
+  }, [adjustTextareaHeight]);
+
+  const updateForm = (updates: Partial<FormState>) => {
+    setForm(prev => ({ ...prev, ...updates }));
+  };
 
   const uploadFile = async (file: File) => {
     setIsSubmitting(true);
@@ -28,7 +72,7 @@ export default function NoteEditor({ onClose, onSave, initialData }: NoteEditorP
       if (!res.ok) throw new Error("Upload failed");
 
       const data = await res.json();
-      setMediaUrls(prev => [...prev, data.url]);
+      updateForm({ mediaUrls: [...form.mediaUrls, data.url] });
     } catch (error) {
       console.error("Image upload failed:", error);
       alert("Failed to upload image.");
@@ -41,21 +85,32 @@ export default function NoteEditor({ onClose, onSave, initialData }: NoteEditorP
     const file = e.target.files?.[0];
     if (!file) return;
     await uploadFile(file);
-    e.target.value = ""; // Reset input so same file can be selected again
+    e.target.value = ""; 
+  };
+
+  const handleAddTag = () => {
+    const trimmed = tagInput.trim();
+    if (trimmed && !form.tags.includes(trimmed)) {
+      updateForm({ tags: [...form.tags, trimmed] });
+      setTagInput("");
+    }
+  };
+
+  const removeTag = (tagToRemove: string) => {
+    updateForm({ tags: form.tags.filter(t => t !== tagToRemove) });
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!form.content.trim()) return;
+
     setIsSubmitting(true);
-
     try {
-      const parsedTags = tagsStr.split(",").map(t => t.trim()).filter(Boolean);
-
       const newNote: CreateNoteDTO = {
-        title: title || "", // empty string allows the API to use the default date
-        content,
-        tags: parsedTags,
-        media: mediaUrls,
+        title: form.title, 
+        content: form.content,
+        tags: form.tags,
+        media: form.mediaUrls,
         date: new Date().toISOString(),
       };
 
@@ -63,350 +118,141 @@ export default function NoteEditor({ onClose, onSave, initialData }: NoteEditorP
       onClose();
     } catch (error) {
       console.error("Failed to save note:", error);
+      alert("Failed to save note. Please try again.");
     } finally {
       setIsSubmitting(false);
     }
   };
 
   return (
-    <div className="editor-overlay">
-      <div className="editor-modal">
-        <div className="editor-header">
-          <h2>{initialData ? "Edit Note" : "Create New Note"}</h2>
-          <button className="close-btn" onClick={onClose}>
-            &times;
-          </button>
-        </div>
-
-        <form onSubmit={handleSubmit} className="editor-form">
-          <div className="form-group">
-            <input
+    <div className={styles["editor-overlay"]} onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+      <div className={styles["editor-modal"]}>
+        <header className={styles["fixed-header"]}>
+           <div className={styles["header-top"]}>
+              <span className={styles["modal-label"]}>{initialData ? "Edit" : "New"} Note</span>
+              <button className={styles["close-icon-btn"]} onClick={onClose} aria-label="Close">
+                &times;
+              </button>
+           </div>
+           <input
+              ref={titleInputRef}
               type="text"
-              placeholder="Title (optional, defaults to date)"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              className="glass-input title-input"
+              placeholder="Untitled Post"
+              value={form.title}
+              onChange={(e) => updateForm({ title: e.target.value })}
+              className={styles["header-title-input"]}
             />
-          </div>
+        </header>
 
-          <div className="form-group content-group">
+        <main className={styles["editor-scroll-area"]}>
+          <div className={styles["viewport"]}>
             <textarea
-              placeholder="What's on your mind? (Required)"
-              value={content}
-              onChange={(e) => setContent(e.target.value)}
+              ref={textareaRef}
+              placeholder="Write something amazing..."
+              value={form.content}
+              onChange={(e) => updateForm({ content: e.target.value })}
               required
-              className="glass-input content-textarea"
+              className={styles["main-textarea"]}
+              rows={1}
             />
           </div>
 
-          <div className="advanced-options">
-            <div className="form-group">
-              <label>Tags (comma separated)</label>
-              <input
-                type="text"
-                placeholder="e.g. React, Next.js, Ideas"
-                value={tagsStr}
-                onChange={(e) => setTagsStr(e.target.value)}
-                className="glass-input"
-              />
-            </div>
-
-            <div className="form-group media-upload-group">
-              <label>Media URLs (Press Enter to add) or Upload</label>
-              {mediaUrls.length > 0 && (
-                <div className="media-pills-container">
-                  {mediaUrls.map((url, idx) => (
-                    <div key={idx} className="media-pill">
-                      <span className="media-pill-text" title={url}>
-                        {url.length > 30 ? url.substring(0, 30) + "..." : url}
-                      </span>
-                      <button
-                        type="button"
-                        className="remove-pill-btn"
-                        onClick={() => setMediaUrls(prev => prev.filter(u => u !== url))}
-                        title="Remove URL"
-                      >
-                        &times;
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              )}
-              <div className="upload-input-row">
+          <section className={styles["metadata-stack"]}>
+            {/* Tags Section */}
+            <div className={styles["meta-section"]}>
+              <label className={styles["section-title"]}>Tags</label>
+              <div className={styles["tags-container"]}>
+                {form.tags.map(tag => (
+                   <span key={tag} className={styles["tag-chip"]}>
+                     {tag}
+                     <button type="button" onClick={() => removeTag(tag)} className={styles["remove-tag"]}>&times;</button>
+                   </span>
+                ))}
                 <input
                   type="text"
-                  placeholder="Paste an image URL and press Enter"
-                  className="glass-input flex-1"
+                  placeholder="Add tag..."
+                  value={tagInput}
+                  onChange={(e) => setTagInput(e.target.value)}
                   onKeyDown={(e) => {
-                    if (e.key === "Enter") {
-                      e.preventDefault();
-                      const url = e.currentTarget.value.trim();
-                      if (url) {
-                        setMediaUrls(prev => [...prev, url]);
-                        e.currentTarget.value = "";
-                      }
+                    if (e.key === "Enter" || e.key === ",") {
+                       e.preventDefault();
+                       handleAddTag();
                     }
                   }}
+                  onBlur={handleAddTag}
+                  className={styles["tag-input-field"]}
                 />
-                <label className="upload-btn btn-secondary glass">
-                  Upload
+              </div>
+            </div>
+
+            {/* Media Section */}
+            <div className={styles["meta-section"]}>
+              <label className={styles["section-title"]}>Media</label>
+              <div className={styles["media-gallery"]}>
+                {form.mediaUrls.map((url, idx) => (
+                  <div key={idx} className={styles["media-thumb-container"]}>
+                    {url.match(/\.(jpeg|jpg|gif|png|webp)$/i) ? (
+                       <img src={url} alt={`Media ${idx}`} className={styles["media-thumb"]} />
+                    ) : (
+                       <div className={styles["media-file-icon"]}>📎 {url.split('/').pop()?.substring(0, 10)}</div>
+                    )}
+                    <button
+                      type="button"
+                      className={styles["remove-thumb"]}
+                      onClick={() => updateForm({ mediaUrls: form.mediaUrls.filter(u => u !== url) })}
+                    >
+                      &times;
+                    </button>
+                  </div>
+                ))}
+                
+                <label className={styles["add-media-btn"]}>
+                  <div className={styles["plus-icon"]}>+</div>
+                  <span>Add</span>
                   <input
                     type="file"
                     accept="image/*"
                     onChange={handleImageUpload}
                     disabled={isSubmitting}
-                    className="hidden-file-input"
+                    className={styles["hidden-file-input"]}
                   />
                 </label>
               </div>
+              <div className={styles["url-input-row"]}>
+                 <input
+                  type="text"
+                  placeholder="Or paste an image URL..."
+                  className={styles["url-direct-input"]}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      const url = e.currentTarget.value.trim();
+                      if (url) {
+                        updateForm({ mediaUrls: [...form.mediaUrls, url] });
+                        e.currentTarget.value = "";
+                      }
+                    }
+                  }}
+                />
+              </div>
             </div>
-          </div>
+          </section>
+        </main>
 
-          <div className="editor-footer">
-            <button type="button" className="btn-secondary glass" onClick={onClose} disabled={isSubmitting}>
-              Cancel
-            </button>
-            <button type="submit" className="btn-primary" disabled={isSubmitting || !content.trim()}>
-              {isSubmitting ? "Saving..." : "Save Note"}
-            </button>
-          </div>
-        </form>
+        <footer className={styles["editor-actions"]}>
+           <button type="button" className={styles["btn-cancel"]} onClick={onClose} disabled={isSubmitting}>
+             Cancel
+           </button>
+           <button 
+             type="button" 
+             className={styles["btn-save"]} 
+             onClick={handleSubmit} 
+             disabled={isSubmitting || !form.content.trim()}
+           >
+             {isSubmitting ? "Saving..." : "Save Note"}
+           </button>
+        </footer>
       </div>
-
-      <style jsx>{`
-        .editor-overlay {
-          position: fixed;
-          top: 0;
-          left: 0;
-          width: 100vw;
-          height: 100vh;
-          background: rgba(0, 0, 0, 0.8);
-          display: flex;
-          justify-content: center;
-          align-items: center;
-          z-index: 1000;
-        }
-
-        .editor-modal {
-          width: 90%;
-          max-width: 1000px;
-          height: 90vh;
-          max-height: 95vh;
-          display: flex;
-          flex-direction: column;
-          overflow: hidden;
-          box-shadow: var(--shadow-hover);
-          background: var(--bg-color);
-          border: 1px solid var(--card-border);
-          border-radius: var(--radius-lg);
-        }
-
-        .editor-header {
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          padding: 1.5rem;
-          border-bottom: 1px solid var(--card-border);
-        }
-
-        .editor-header h2 {
-          font-size: 1.5rem;
-          margin: 0;
-          color: var(--text-main);
-        }
-
-        .close-btn {
-          font-size: 2rem;
-          color: var(--text-muted);
-          line-height: 1;
-          transition: color 0.2s;
-        }
-
-        .close-btn:hover {
-          color: var(--text-main);
-        }
-
-        .editor-form {
-          display: flex;
-          flex-direction: column;
-          padding: 1.5rem;
-          overflow-y: auto;
-          gap: 1.5rem;
-          flex: 1;
-          min-height: 0;
-        }
-
-        .form-group {
-          display: flex;
-          flex-direction: column;
-          gap: 0.5rem;
-        }
-
-        .form-group label {
-          font-size: 0.9rem;
-          font-weight: 600;
-          color: var(--text-muted);
-        }
-
-        .glass-input {
-          width: 100%;
-          padding: 0.75rem 1rem;
-          border-radius: var(--radius-md);
-          border: 1px solid var(--card-border);
-          background: rgba(255, 255, 255, 0.1);
-          color: var(--text-main);
-          font-size: 1rem;
-          transition: var(--transition);
-        }
-
-        .glass-input:focus {
-          outline: none;
-          border-color: var(--accent-color);
-          box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2);
-        }
-
-        .title-input {
-          font-size: 1.25rem;
-          font-weight: 600;
-          padding: 1rem;
-        }
-
-        .content-group {
-          flex: 1;
-          min-height: 0;
-        }
-
-        .content-textarea {
-          flex: 1;
-          min-height: 100px;
-          resize: none;
-          font-family: var(--font-inter);
-          overflow-y: auto;
-        }
-
-        .advanced-options {
-          display: grid;
-          grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-          gap: 1rem;
-          padding: 1rem;
-          background: rgba(0, 0, 0, 0.02);
-          border-radius: var(--radius-md);
-          border: 1px dashed var(--card-border);
-        }
-
-        .editor-footer {
-          display: flex;
-          justify-content: flex-end;
-          gap: 1rem;
-          padding-top: 1rem;
-          border-top: 1px solid var(--card-border);
-        }
-
-        .btn-primary, .btn-secondary {
-          padding: 0.75rem 1.5rem;
-          border-radius: var(--radius-md);
-          font-weight: 600;
-          transition: var(--transition);
-        }
-
-        .btn-primary {
-          background: var(--accent-color);
-          color: white;
-        }
-
-        .btn-primary:hover:not(:disabled) {
-          background: var(--accent-hover);
-          transform: translateY(-2px);
-          box-shadow: var(--shadow-sm);
-        }
-
-        .btn-primary:disabled {
-          opacity: 0.7;
-          cursor: not-allowed;
-        }
-
-        .btn-secondary:hover {
-          background: rgba(0, 0, 0, 0.05);
-        }
-
-        .media-upload-group {
-           display: flex;
-           flex-direction: column;
-           gap: 0.5rem;
-        }
-
-        .media-pills-container {
-          display: flex;
-          flex-wrap: wrap;
-          gap: 0.5rem;
-          margin-bottom: 0.25rem;
-        }
-
-        .media-pill {
-          display: flex;
-          align-items: center;
-          gap: 0.25rem;
-          background: rgba(59, 130, 246, 0.15);
-          border: 1px solid rgba(59, 130, 246, 0.3);
-          border-radius: 9999px;
-          padding: 0.25rem 0.6rem;
-          font-size: 0.85rem;
-          color: var(--text-main);
-        }
-
-        .media-pill-text {
-          max-width: 200px;
-          overflow: hidden;
-          text-overflow: ellipsis;
-          white-space: nowrap;
-        }
-
-        .remove-pill-btn {
-          background: none;
-          border: none;
-          color: var(--text-muted);
-          cursor: pointer;
-          font-size: 1.1rem;
-          line-height: 1;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          padding: 0 0 0 0.2rem;
-          transition: color 0.2s;
-        }
-
-        .remove-pill-btn:hover {
-          color: var(--text-main);
-        }
-
-        .upload-input-row {
-          display: flex;
-          gap: 0.5rem;
-          align-items: center;
-        }
-
-        .flex-1 {
-           flex: 1;
-        }
-
-        .upload-btn {
-           cursor: pointer;
-           display: inline-flex;
-           align-items: center;
-           justify-content: center;
-           margin: 0;
-           font-size: 0.9rem;
-        }
-
-        .upload-btn[disabled] {
-            opacity: 0.7;
-            cursor: not-allowed;
-        }
-
-        .hidden-file-input {
-           display: none;
-        }
-      `}</style>
     </div>
   );
 }

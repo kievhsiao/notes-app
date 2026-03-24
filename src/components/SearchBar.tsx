@@ -1,4 +1,4 @@
-import { useState, KeyboardEvent } from "react";
+import { useState, useEffect, KeyboardEvent } from "react";
 
 interface SearchBarProps {
   value: string;
@@ -7,6 +7,11 @@ interface SearchBarProps {
 
 export default function SearchBar({ value, onSearch }: SearchBarProps) {
   const [localValue, setLocalValue] = useState(value);
+
+  // Sync with value from parent (e.g. when clearing search)
+  useEffect(() => {
+    setLocalValue(value);
+  }, [value]);
 
   const handleSearch = () => {
     onSearch(localValue);

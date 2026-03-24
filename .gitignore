@@ -41,7 +41,7 @@ yarn-error.log*
 next-env.d.ts
 
 # data
-data/notes.jsonl
+data/
 
 # uploads
 public/uploads

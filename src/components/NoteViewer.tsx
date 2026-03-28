@@ -1,5 +1,5 @@
 import { Note } from "@/lib/types";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import Image from "next/image";
 
 interface NoteViewerProps {
@@ -8,7 +8,7 @@ interface NoteViewerProps {
 }
 
 export default function NoteViewer({ note, onClose }: NoteViewerProps) {
-  const [selectedImage, setSelectedImage] = useState<string | null>(null);
+  const [selectedImageIndex, setSelectedImageIndex] = useState<number | null>(null);
 
   // Prevent body scrolling when modal is open
   useEffect(() => {
@@ -33,7 +33,43 @@ export default function NoteViewer({ note, onClose }: NoteViewerProps) {
   });
 
   // Tumblr-Style Layout Pattern Logic
-  const mediaCount = note.media ? note.media.length : 0;
+  const normalizedMedia = (note.media || []).map(url => 
+    url.startsWith('http') ? url : (url.startsWith('/') ? url : `/${url}`)
+  );
+
+  const goNext = useCallback((e?: React.MouseEvent) => {
+    e?.stopPropagation();
+    if (selectedImageIndex !== null && normalizedMedia.length > 0) {
+      setSelectedImageIndex((selectedImageIndex + 1) % normalizedMedia.length);
+    }
+  }, [selectedImageIndex, normalizedMedia.length]);
+
+  const goPrev = useCallback((e?: React.MouseEvent) => {
+    e?.stopPropagation();
+    if (selectedImageIndex !== null && normalizedMedia.length > 0) {
+      setSelectedImageIndex((selectedImageIndex - 1 + normalizedMedia.length) % normalizedMedia.length);
+    }
+  }, [selectedImageIndex, normalizedMedia.length]);
+
+  const closeLightbox = useCallback(() => {
+    setSelectedImageIndex(null);
+  }, []);
+
+  // Keyboard navigation
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (selectedImageIndex === null) return;
+      
+      if (e.key === "ArrowRight") { e.stopImmediatePropagation(); goNext(); }
+      if (e.key === "ArrowLeft") { e.stopImmediatePropagation(); goPrev(); }
+      // stopImmediatePropagation prevents the parent page.tsx Escape handler
+      // from also closing the NoteViewer when user only wants to close Lightbox
+      if (e.key === "Escape") { e.stopImmediatePropagation(); closeLightbox(); }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [selectedImageIndex, goNext, goPrev, closeLightbox]);
 
   return (
     <div className="viewer-overlay" onClick={handleBackdropClick}>
@@ -72,38 +108,39 @@ export default function NoteViewer({ note, onClose }: NoteViewerProps) {
 
         <div className="viewer-content-area">
           {/* Strict Tumblr-Style Photoset */}
-          {note.media && mediaCount > 0 && (
-            <div className={`tumblr-gallery tumblr-layout-${Math.min(mediaCount, 4)}`}>
-              {mediaCount === 1 ? (
+          {normalizedMedia.length > 0 && (
+            <div className={`tumblr-gallery tumblr-layout-${Math.min(normalizedMedia.length, 4)}`}>
+              {normalizedMedia.length === 1 ? (
                 <div className="tumblr-photo">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
-                    src={note.media[0].startsWith('http') ? note.media[0] : (note.media[0].startsWith('/') ? note.media[0] : `/${note.media[0]}`)}
+                    src={normalizedMedia[0]}
                     alt={`Media attachment 1`}
                     loading="lazy"
                     onError={(e) => {
-                      console.error("Image failed to load:", note.media[0]);
+                      console.error("Image failed to load:", normalizedMedia[0]);
                       (e.target as HTMLElement).style.opacity = '0.5';
                     }}
-                    onClick={() => setSelectedImage(note.media[0].startsWith('http') ? note.media[0] : (note.media[0].startsWith('/') ? note.media[0] : `/${note.media[0]}`))}
+                    onClick={() => setSelectedImageIndex(0)}
                   />
                 </div>
               ) : (
-                note.media.slice(0, 4).map((url, idx) => {
-                  const srcPath = url.startsWith('http') ? url : (url.startsWith('/') ? url : `/${url}`);
+                normalizedMedia.slice(0, 4).map((url, idx) => {
+                  const totalCount = normalizedMedia.length;
                   return (
                     <div key={idx} className="tumblr-photo">
                       <Image 
-                        src={srcPath} 
-                        alt={`Media gallery attachment ${idx + 1} of ${mediaCount}`} 
+                        src={url} 
+                        alt={`Media gallery attachment ${idx + 1} of ${totalCount}`} 
                         fill 
                         sizes="(max-width: 768px) 100vw, 50vw"
+                        style={{ objectFit: 'cover' }}
                         onError={(e) => { (e.target as HTMLElement).style.opacity = '0.5'; }}
-                        onClick={() => setSelectedImage(srcPath)} 
+                        onClick={() => setSelectedImageIndex(idx)} 
                       />
-                      {idx === 3 && mediaCount > 4 && (
-                        <div className="more-overlay" onClick={() => setSelectedImage(srcPath)}>
-                          <span>+{mediaCount - 4}</span>
+                      {idx === 3 && totalCount > 4 && (
+                        <div className="more-overlay" onClick={(e) => { e.stopPropagation(); setSelectedImageIndex(3); }}>
+                          <span>+{totalCount - 4}</span>
                         </div>
                       )}
                     </div>
@@ -112,8 +149,6 @@ export default function NoteViewer({ note, onClose }: NoteViewerProps) {
               )}
             </div>
           )}
-
-          {/* Editor-First Read-Layout (Scheme A) */}
 
           <div className="note-text-content read-layout">
             {note.content}
@@ -126,15 +161,57 @@ export default function NoteViewer({ note, onClose }: NoteViewerProps) {
         </div>
       </div>
 
-      {selectedImage && (
-        <div className="full-image-overlay" onClick={() => setSelectedImage(null)}>
-          <Image 
-            src={selectedImage} 
-            alt="Full size media" 
-            fill
-            style={{ objectFit: 'contain' }}
-            className="full-image" 
-          />
+      {/* Enhanced Lightbox */}
+      {selectedImageIndex !== null && (
+        <div className="lightbox-container" onClick={closeLightbox}>
+          <button className="lightbox-close-btn" onClick={closeLightbox} aria-label="Close Lightbox">
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+          </button>
+          
+          <div className="lightbox-main">
+            {normalizedMedia.length > 1 && (
+              <button className="lightbox-nav-btn lightbox-nav-prev" onClick={goPrev} aria-label="Previous Image">
+                <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="m15 18-6-6 6-6"/></svg>
+              </button>
+            )}
+
+            <div className="lightbox-image-wrapper" onClick={(e) => e.stopPropagation()}>
+              <Image 
+                src={normalizedMedia[selectedImageIndex]} 
+                alt={`Full size media ${selectedImageIndex + 1}`} 
+                fill
+                style={{ objectFit: 'contain' }}
+                className="lightbox-image" 
+                priority
+              />
+            </div>
+
+            {normalizedMedia.length > 1 && (
+              <button className="lightbox-nav-btn lightbox-nav-next" onClick={goNext} aria-label="Next Image">
+                <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+              </button>
+            )}
+          </div>
+
+          <div className="lightbox-footer">
+            <div className="lightbox-counter">
+              {selectedImageIndex + 1} / {normalizedMedia.length}
+            </div>
+            
+            {normalizedMedia.length > 1 && (
+              <div className="lightbox-thumbnails">
+                {normalizedMedia.map((url, idx) => (
+                  <img 
+                    key={idx}
+                    src={url}
+                    alt={`Thumbnail ${idx + 1}`}
+                    className={`lightbox-thumb ${selectedImageIndex === idx ? 'lightbox-thumb-active' : ''}`}
+                    onClick={(e) => { e.stopPropagation(); setSelectedImageIndex(idx); }}
+                  />
+                ))}
+              </div>
+            )}
+          </div>
         </div>
       )}
 
@@ -162,7 +239,7 @@ export default function NoteViewer({ note, onClose }: NoteViewerProps) {
           flex-direction: column;
           background: var(--card-bg);
           border: 1px solid var(--card-border);
-          box-shadow: var(--shadow-xl);
+          box-shadow: var(--shadow-lg);
           border-radius: var(--radius-lg);
           overflow: hidden;
           position: relative;
@@ -237,8 +314,6 @@ export default function NoteViewer({ note, onClose }: NoteViewerProps) {
           scrollbar-color: var(--card-border) transparent;
         }
 
-        /* Note Text Content */
-
         .note-text-content {
           font-size: 1.05rem;
           line-height: 1.75;
@@ -293,29 +368,8 @@ export default function NoteViewer({ note, onClose }: NoteViewerProps) {
           .viewer-content-area { padding: 1.5rem; }
           .viewer-title { font-size: 1.5rem; }
         }
-
-        .full-image-overlay {
-          position: fixed;
-          top: 0;
-          left: 0;
-          width: 100vw;
-          height: 100vh;
-          background: rgba(0, 0, 0, 0.95);
-          display: flex;
-          justify-content: center;
-          align-items: center;
-          z-index: 2000;
-          cursor: zoom-out;
-        }
-
-        .full-image {
-          max-width: 95vw;
-          max-height: 95vh;
-          object-fit: contain;
-          border-radius: var(--radius-md);
-          box-shadow: 0 0 40px rgba(0,0,0,0.5);
-        }
       `}</style>
     </div>
   );
 }
+

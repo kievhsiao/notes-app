@@ -24,9 +24,12 @@ export default function NoteEditor({ onClose, onSave, initialData }: NoteEditorP
   });
   const [tagInput, setTagInput] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
+  const [uploadingCount, setUploadingCount] = useState(0);
   
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const titleInputRef = useRef<HTMLInputElement>(null);
+  const dropCounter = useRef(0);
 
   // Focus Title on open
   useEffect(() => {
@@ -58,11 +61,16 @@ export default function NoteEditor({ onClose, onSave, initialData }: NoteEditorP
     setForm(prev => ({ ...prev, ...updates }));
   };
 
-  const uploadFile = async (file: File) => {
-    setIsSubmitting(true);
+  const uploadFiles = async (files: FileList | File[]) => {
+    const filesToUpload = Array.from(files).filter(file => file.type.startsWith('image/'));
+    if (filesToUpload.length === 0) return;
+
+    setUploadingCount(prev => prev + filesToUpload.length);
     try {
       const formData = new FormData();
-      formData.append("file", file);
+      filesToUpload.forEach(file => {
+        formData.append("file", file);
+      });
 
       const res = await fetch("/api/upload", {
         method: "POST",
@@ -72,20 +80,59 @@ export default function NoteEditor({ onClose, onSave, initialData }: NoteEditorP
       if (!res.ok) throw new Error("Upload failed");
 
       const data = await res.json();
-      updateForm({ mediaUrls: [...form.mediaUrls, data.url] });
+      // API returns { url, urls }
+      const newUrls: string[] = data.urls || [data.url];
+      // Use functional updater to avoid stale closure on form.mediaUrls
+      setForm(prev => ({ ...prev, mediaUrls: [...prev.mediaUrls, ...newUrls] }));
     } catch (error) {
       console.error("Image upload failed:", error);
-      alert("Failed to upload image.");
+      alert("Failed to upload image(s).");
     } finally {
-      setIsSubmitting(false);
+      setUploadingCount(prev => Math.max(0, prev - filesToUpload.length));
     }
   };
 
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    await uploadFile(file);
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+    await uploadFiles(files);
     e.target.value = ""; 
+  };
+
+  // Drag and drop handlers
+  const handleDragEnter = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    dropCounter.current++;
+    if (e.dataTransfer.items && e.dataTransfer.items.length > 0) {
+      setIsDragging(true);
+    }
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    dropCounter.current--;
+    if (dropCounter.current === 0) {
+      setIsDragging(false);
+    }
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+  };
+
+  const handleDrop = async (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+    dropCounter.current = 0;
+
+    const files = e.dataTransfer.files;
+    if (files && files.length > 0) {
+      await uploadFiles(files);
+    }
   };
 
   const handleAddTag = () => {
@@ -126,7 +173,22 @@ export default function NoteEditor({ onClose, onSave, initialData }: NoteEditorP
 
   return (
     <div className={styles["editor-overlay"]} onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
-      <div className={styles["editor-modal"]}>
+      <div 
+        className={styles["editor-modal"]}
+        onDragEnter={handleDragEnter}
+        onDragLeave={handleDragLeave}
+        onDragOver={handleDragOver}
+        onDrop={handleDrop}
+      >
+        {isDragging && (
+          <div className={styles["drop-zone-overlay"]}>
+            <div className={styles["drop-zone-message"]}>
+              <div className={styles["drop-icon"]}>📸</div>
+              <div className={styles["drop-text"]}>Drop to upload images</div>
+            </div>
+          </div>
+        )}
+
         <header className={styles["fixed-header"]}>
            <div className={styles["header-top"]}>
               <span className={styles["modal-label"]}>{initialData ? "Edit" : "New"} Note</span>
@@ -206,6 +268,13 @@ export default function NoteEditor({ onClose, onSave, initialData }: NoteEditorP
                   </div>
                 ))}
                 
+                {uploadingCount > 0 && Array.from({ length: uploadingCount }).map((_, i) => (
+                  <div key={`uploading-${i}`} className={styles["uploading-indicator"]}>
+                    <div className={styles["spinner-mini"]}></div>
+                    <span>Uploading...</span>
+                  </div>
+                ))}
+
                 <label className={styles["add-media-btn"]}>
                   <div className={styles["plus-icon"]}>+</div>
                   <span>Add</span>
@@ -213,7 +282,8 @@ export default function NoteEditor({ onClose, onSave, initialData }: NoteEditorP
                     type="file"
                     accept="image/*"
                     onChange={handleImageUpload}
-                    disabled={isSubmitting}
+                    disabled={isSubmitting || uploadingCount > 0}
+                    multiple
                     className={styles["hidden-file-input"]}
                   />
                 </label>
@@ -256,3 +326,4 @@ export default function NoteEditor({ onClose, onSave, initialData }: NoteEditorP
     </div>
   );
 }
+

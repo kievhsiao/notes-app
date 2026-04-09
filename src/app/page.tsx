@@ -37,10 +37,6 @@ export default function Home() {
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
-        if (isEditorOpen) {
-          setIsEditorOpen(false);
-          setEditingNote(null);
-        }
         if (isViewerOpen) {
           setIsViewerOpen(false);
           setViewingNote(null);

@@ -172,7 +172,7 @@ export default function NoteEditor({ onClose, onSave, initialData }: NoteEditorP
   };
 
   return (
-    <div className={styles["editor-overlay"]} onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+    <div className={styles["editor-overlay"]}>
       <div 
         className={styles["editor-modal"]}
         onDragEnter={handleDragEnter}
